@@ -13,33 +13,68 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
         //Pętla iterująca po wszystkich strunach
         for (size_t v = 0; v < num_voices; v++) {
 
+            float envelope = 1.0f;  //startowa głośność
+
             if (current_time >= voices[v].start_time_sec && voices[v].has_been_plucked == 0) {
 
                 //szarpnięcie struny, szum do bufora
                 for (size_t j = 0; j < voices[v].delay_line->size; j++) {
-                    push_sample(voices[v].delay_line, generate_white_noise());
+                    float noise = generate_white_noise();
+                    
+                    //uciszamy szybko jesli to ktorys z tych mode
+                    if (voices[v].mode == MODE_DRUM || voices[v].mode == MODE_SNARE) {
+                        noise *= envelope; 
+                        envelope *= 0.95f;  //sciszamh szum zgodnie z obwiednią- obwiednia 5% w dól
+                    }
+                    
+                    push_sample(voices[v].delay_line, noise);
                 }
 
                 //zaznaczenie że już gra
                 voices[v].is_active = 1;
                 voices[v].has_been_plucked = 1;
+                voices[v].hpf_state = 0.0f; 
             }
 
             if (voices[v].is_active) {
                 
                 //probka z bufora
-                float current_sample = read_sample(voices[v].delay_line, voices[v].delay_line->size);
+                float current_sample;
                 float processed_sample = 0.0f;
 
                 //Filtrdolnoprzepustowy z alfa
+                if (voices[v].mode == MODE_HIHAT) {
+                    //próbka z losowego miejsca blisko końca bufora, powiino dać metalicznosc
+                    int mod_offset = rand() % 10; 
+                    current_sample = read_sample(voices[v].delay_line, voices[v].delay_line->size - mod_offset);
+                } else {
+                    //odczyt standardowey
+                    current_sample = read_sample(voices[v].delay_line, voices[v].delay_line->size);
+                }
+
+                //filtracja zalezna od trybu
                 if (voices[v].mode == MODE_STRING) {
-                    processed_sample = (voices[v].alpha * current_sample) + 
-                                       ((1.0f - voices[v].alpha) * voices[v].previous_sample);
-                                       
+                    processed_sample = (voices[v].alpha * current_sample) + ((1.0f - voices[v].alpha) * voices[v].previous_sample);
+                
                 } else if (voices[v].mode == MODE_DRUM) {
-                    float sign = (rand() % 2 == 0) ? 1.0f : -1.0f; 
-                    processed_sample = sign * ((voices[v].alpha * current_sample) + 
-                                               ((1.0f - voices[v].alpha) * voices[v].previous_sample));
+                    //Mocny filtr dolnoprzepustowy bez odwracania znaku
+                    processed_sample = (voices[v].alpha * current_sample) + ((1.0f - voices[v].alpha) * voices[v].previous_sample);
+                
+                } else if (voices[v].mode == MODE_HIHAT) {
+                    //agresywne odwracanie fazy + modulowany odczyt
+                    float sign = (rand() % 100 < 50) ? -1.0f : 1.0f; 
+                    processed_sample = sign * ((voices[v].alpha * current_sample) + ((1.0f - voices[v].alpha) * voices[v].previous_sample));
+                
+                } else if (voices[v].mode == MODE_SNARE) {
+                    //uśrednainiane z odwracaniem fazy 
+                    float sign = (rand() % 100 < 50) ? -1.0f : 1.0f; 
+                    float smoothed = 0.5f * current_sample + 0.5f * voices[v].previous_sample;
+                    processed_sample = sign * smoothed;
+                    
+                    //FILTR GÓRNOPRZEPUSTOWY
+                    float hpf_out = processed_sample - voices[v].hpf_state;
+                    voices[v].hpf_state = processed_sample;
+                    processed_sample = hpf_out;
                 }
 
                 //Damping

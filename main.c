@@ -8,15 +8,17 @@ int main() {
     init_noise_generator();
     int sample_rate = 44100;
 
+    printf("\n=== SEKWEKCER KARPLUS-STRONG ===\n");
+
     int num_voices;
-    printf("Ile strun? ");
+    printf("Ile instrumentow/strun chcesz uzyc? ");
     if (scanf("%d", &num_voices) != 1 || num_voices <= 0) {
         printf("Zla liczba\n");
         return 1;
     }
 
     float duration_sec;
-    printf("Ile sekund? ");
+    printf("Ile sekund ma trwac cale nagranie? ");
     if (scanf("%f", &duration_sec) != 1 || duration_sec <= 0.0f) {
         printf("Zly czas\n");
         return 1;
@@ -25,57 +27,67 @@ int main() {
     //Alokacja pamieci na plik i struny
     size_t num_samples = (size_t)(sample_rate * duration_sec);
     float* output_audio = (float*)malloc(num_samples * sizeof(float));
-    Voice* voices = (Voice*)malloc(num_voices * sizeof(Voice)); //dynamiczna tablica głospw
+    Voice* voices = (Voice*)malloc(num_voices * sizeof(Voice)); //dynamiczna tablica glosow
 
     if (!output_audio || !voices) return 1;
 
     for (int i = 0; i < num_voices; i++) {
         float freq, damping, alpha, start_time;
+        int mode_input;
 
-        printf("\n--- KONFIGURACJA STRUNY %d ---\n", i + 1);
+        printf("\n--- KONFIGURACJA GLOSU %d ---\n", i + 1);
         
-        printf("Czestotliwosc w Hz (bas=82, gitara=330): ");
+        printf("Wybierz instrument (0=STRUNA, 1=STOPA/TOM, 2=WERBEL, 3=HI-HAT): ");
+        scanf("%d", &mode_input);
+        if (mode_input < 0 || mode_input > 3) mode_input = 0; // Zabezpieczenie przed zlym wpisem
+
+        printf("Czestotliwosc w Hz (np. bas=82, werbel=120, hihat=300): ");
         scanf("%f", &freq);
 
-        printf("Tlumienie- twardosc struny: ");
+        printf("Tlumienie (np. gitara=0.999, perkusja=0.950): ");
         scanf("%f", &damping);
 
         printf("Ostrosc (0.9 = jasny brzek, 0.1 = matowy, gluchy): ");
         scanf("%f", &alpha);
 
-        printf("Czas startu w sekundach: ");
+        printf("Czas startu w sekundach (np. 0.0, 1.5): ");
         scanf("%f", &start_time);
 
-        //Wstrykniecie wartosci do struny
+        //wstrzykniecie wartosci do struny
         size_t buffer_size = (size_t)(sample_rate / freq);
         voices[i].delay_line = create_buffer(buffer_size);
+        
+        //zapełniamy bufor początkowy ciszą (0.0f)
+        for(size_t j = 0; j < buffer_size; j++) {
+            push_sample(voices[i].delay_line, 0.0f); 
+        }
+
         voices[i].damping = damping;
         voices[i].alpha = alpha;
         voices[i].previous_sample = 0.0f;
+        
+        //mapowanie wpisanej liczby na tryb instrumentu
+        voices[i].mode = (InstrumentMode)mode_input; 
+        
+        //ustawienia sekwencera
         voices[i].is_active = 0;
-        voices[i].mode = MODE_STRING;
-        voices[i].has_been_plucked=0;
-        voices[i].start_time_sec=start_time;
-
-        //Szarpniecie
-        for (size_t j = 0; j < buffer_size; j++) {
-            push_sample(voices[i].delay_line, generate_white_noise());
-        }
+        voices[i].has_been_plucked = 0;
+        voices[i].start_time_sec = start_time;
     }
 
-    //renderowanie 
+    // Renderowanie 
     synthesize_poly(voices, num_voices, output_audio, num_samples);
 
-    save_to_wav("drum.wav", output_audio, num_samples, sample_rate);
+    save_to_wav("perkusja.wav", output_audio, num_samples, sample_rate);
 
-    //sprzątanie
+    // Sprzątanie
     for (int i = 0; i < num_voices; i++) {
         free_buffer(voices[i].delay_line);
     }
     free(voices);
     free(output_audio);
 
-    printf("Otworz plik: wlasny_akord.wav\n\n");
+    printf("Otworz plik: orkiestra.wav\n\n");
     return 0;
 }
 
