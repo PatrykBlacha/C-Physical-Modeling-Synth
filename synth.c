@@ -1,24 +1,37 @@
 #include "synth.h"
 #include <stdlib.h>
+#include"core.h"
 
 void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num_samples) {
     
-    // Pętla po nagraniu
+    //petla po nagraniu
     for (size_t i = 0; i < num_samples; i++) {
-        float mixed_sample = 0.0f; // próbka na wszystkie struny
+        float mixed_sample = 0.0f; //próbka na wszystkie struny
+
+        float current_time = (float)i / 44100.0f;   //czas w sekundach
         
-        // Pętla iterująca po wszystkich strunach (polifonia)
+        //Pętla iterująca po wszystkich strunach
         for (size_t v = 0; v < num_voices; v++) {
 
-            // Przetwarzamy strunę tylko, jeśli jest "włączona"
-            // ZWRÓĆ UWAGĘ: Działamy prosto na tablicy voices[v], a nie na kopii!
+            if (current_time >= voices[v].start_time_sec && voices[v].has_been_plucked == 0) {
+
+                //szarpnięcie struny, szum do bufora
+                for (size_t j = 0; j < voices[v].delay_line->size; j++) {
+                    push_sample(voices[v].delay_line, generate_white_noise());
+                }
+
+                //zaznaczenie że już gra
+                voices[v].is_active = 1;
+                voices[v].has_been_plucked = 1;
+            }
+
             if (voices[v].is_active) {
                 
-                // 1. Odczyt opóźnionej próbki z bufora struny
+                //probka z bufora
                 float current_sample = read_sample(voices[v].delay_line, voices[v].delay_line->size);
                 float processed_sample = 0.0f;
 
-                // 2. Filtr dolnoprzepustowy (alfa)
+                //Filtrdolnoprzepustowy z alfa
                 if (voices[v].mode == MODE_STRING) {
                     processed_sample = (voices[v].alpha * current_sample) + 
                                        ((1.0f - voices[v].alpha) * voices[v].previous_sample);
@@ -29,21 +42,19 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                                                ((1.0f - voices[v].alpha) * voices[v].previous_sample));
                 }
 
-                // 3. Tłumienie (damping)
+                //Damping
                 processed_sample *= voices[v].damping;
 
-                // 4. Sprzężenie zwrotne
+                //sprzężenie zwrotne
                 push_sample(voices[v].delay_line, processed_sample);
-                
-                // TERAZ TA LINIA NAPRAWDĘ ZAPISZE DANE W ORYGINALNEJ STRUNIE:
                 voices[v].previous_sample = current_sample;
 
-                // 5. Miksowanie
+                //miksowanie
                 mixed_sample += processed_sample;
             }
         }
 
-        // Zabezpieczenie przed przesterowaniem (clipping)
+        //zabezpieczenie na clipping
         if (num_voices > 0) {
             output[i] = mixed_sample / (float)num_voices;
         } else {

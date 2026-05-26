@@ -16,6 +16,9 @@ typedef struct {
     float previous_sample;
     int is_active;           //flaga czy struna gra(1) czy nie(0)
     InstrumentMode mode;     //tryb
+
+    float start_time_sec;    //start grania
+    int has_been_plucked;    //czy teraz gra
 } Voice;
 
 //petla karplusa

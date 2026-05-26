@@ -30,7 +30,7 @@ int main() {
     if (!output_audio || !voices) return 1;
 
     for (int i = 0; i < num_voices; i++) {
-        float freq, damping, alpha;
+        float freq, damping, alpha, start_time;
 
         printf("\n--- KONFIGURACJA STRUNY %d ---\n", i + 1);
         
@@ -43,14 +43,19 @@ int main() {
         printf("Ostrosc (0.9 = jasny brzek, 0.1 = matowy, gluchy): ");
         scanf("%f", &alpha);
 
+        printf("Czas startu w sekundach: ");
+        scanf("%f", &start_time);
+
         //Wstrykniecie wartosci do struny
         size_t buffer_size = (size_t)(sample_rate / freq);
         voices[i].delay_line = create_buffer(buffer_size);
         voices[i].damping = damping;
         voices[i].alpha = alpha;
         voices[i].previous_sample = 0.0f;
-        voices[i].is_active = 1;
+        voices[i].is_active = 0;
         voices[i].mode = MODE_STRING;
+        voices[i].has_been_plucked=0;
+        voices[i].start_time_sec=start_time;
 
         //Szarpniecie
         for (size_t j = 0; j < buffer_size; j++) {
@@ -61,7 +66,7 @@ int main() {
     //renderowanie 
     synthesize_poly(voices, num_voices, output_audio, num_samples);
 
-    save_to_wav("G.wav", output_audio, num_samples, sample_rate);
+    save_to_wav("drum.wav", output_audio, num_samples, sample_rate);
 
     //sprzątanie
     for (int i = 0; i < num_voices; i++) {
@@ -70,7 +75,7 @@ int main() {
     free(voices);
     free(output_audio);
 
-    printf("Zrobione! Otworz plik: wlasny_akord.wav\n\n");
+    printf("Otworz plik: wlasny_akord.wav\n\n");
     return 0;
 }
 
