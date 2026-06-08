@@ -1,3 +1,5 @@
+#include "fdtd_drum.h"
+
 #ifndef SYNTH_H
 #define SYNTH_H
 
@@ -9,7 +11,8 @@ typedef enum {
     MODE_DRUM,    //perkusyjny
     MODE_SNARE,    //werbel z filtrem pasmowym
     MODE_HIHAT,       //talerze z modulacja
-    MODE_PIANO
+    MODE_PIANO,
+    MODE_FDTD_DRUM
 } InstrumentMode;
 
 typedef struct {
@@ -27,6 +30,8 @@ typedef struct {
 
     float ap_prev_in;
     float ap_prev_out;
+
+    Drum2D* drum_mesh;
 } Voice;
 
 //petla karplusa

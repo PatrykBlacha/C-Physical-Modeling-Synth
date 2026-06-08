@@ -1,9 +1,131 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "core.h"
 #include "wav.h"
 #include "synth.h"
 
+
+int main() {
+    init_noise_generator();
+    int sample_rate = 44100;
+
+    printf("\n=== SEKWEKCER KARPLUS-STRONG (Z PLIKU) ===\n");
+
+    // 1. ZAPytanie o nazwę pliku
+    char filename[100];
+    printf("Podaj nazwe pliku z parametrami: ");
+    scanf("%99s", filename);
+
+    char out_filename[100];
+    strcpy(out_filename, filename);
+    
+    char *dot = strrchr(out_filename, '.');   //plik wyjsciowy
+    if (dot != NULL) {
+        strcpy(dot, ".wav");
+    } else {
+        strcat(out_filename, ".wav");
+    }
+
+
+    // 2. Otwieramy plik w trybie do odczytu ("r" - read)
+    FILE* file = fopen(filename, "r");
+    if (file == NULL) {
+        printf("Blad: Nie udalo sie otworzyc pliku %s!\n", filename);
+        return 1;
+    }
+
+    float duration_sec;
+    int num_voices;
+
+    // 3. Wczytujemy z pierwszej linijki czas trwania (float) i ilosc nut (int)
+    if (fscanf(file, "%f %d", &duration_sec, &num_voices) != 2) {
+        printf("Blad formatu w pierwszej linijce pliku.\n");
+        fclose(file);
+        return 1;
+    }
+
+    // Alokacja pamieci na plik i struny (Zostaje jak było)
+    size_t num_samples = (size_t)(sample_rate * duration_sec);
+    float* output_audio = (float*)malloc(num_samples * sizeof(float));
+    Voice* voices = (Voice*)malloc(num_voices * sizeof(Voice));
+
+    if (!output_audio || !voices) {
+        fclose(file);
+        return 1;
+    }
+
+    printf("Pobrano z pliku: %d instrumentow. Czas nagrania: %.2f s\n", num_voices, duration_sec);
+
+    // 4. Pętla wczytująca kolejne linijki instrumentów
+    for (int i = 0; i < num_voices; i++) {
+        float freq, damping, alpha, start_time;
+        int mode_input;
+
+        // Magia fscanf - zaciągamy 5 zmiennych naraz z jednej linijki!
+        if (fscanf(file, "%d %f %f %f %f", &mode_input, &freq, &damping, &alpha, &start_time) != 5) {
+            printf("Blad formatu danych w linii %d!\n", i + 2);
+            fclose(file);
+            return 1;
+        }
+
+        if (mode_input < 0 || mode_input > 5) mode_input = 0; // Zabezpieczenie
+
+        // Wstrzykniecie wartosci do struny (Zostaje jak było)
+        size_t buffer_size = (size_t)(sample_rate / freq);
+        voices[i].delay_line = create_buffer(buffer_size);
+        
+        for(size_t j = 0; j < buffer_size; j++) {
+            push_sample(voices[i].delay_line, 0.0f); 
+        }
+
+        voices[i].damping = damping;
+        voices[i].alpha = alpha;
+        voices[i].previous_sample = 0.0f;
+        voices[i].ap_prev_in = 0.0f;
+        voices[i].ap_prev_in = 0.0f;
+        voices[i].ap_prev_out = 0.0f;
+        
+        voices[i].mode = (InstrumentMode)mode_input; 
+
+        //membrana 2d
+        if (voices[i].mode == MODE_FDTD_DRUM) {
+            // rho = 0.70f (Maksymalne stabilne naprężenie wg warunku CFL)
+            voices[i].drum_mesh = create_drum2d(0.15f, damping);
+        } else {
+            voices[i].drum_mesh = NULL; //inne 
+        }
+        voices[i].is_active = 0;
+        voices[i].has_been_plucked = 0;
+        voices[i].start_time_sec = start_time;
+    }
+
+    // 5. Zamykamy plik - skończyliśmy go czytać
+    fclose(file);
+
+    // Renderowanie 
+    printf("Trwa renderowanie DSP...\n");
+    synthesize_poly(voices, num_voices, output_audio, num_samples);
+
+    save_to_wav(out_filename, output_audio, num_samples, sample_rate);
+
+    // Sprzątanie
+    for (int i = 0; i < num_voices; i++) {
+        free_buffer(voices[i].delay_line);
+        
+        //siatka 2d
+        if (voices[i].mode == MODE_FDTD_DRUM) {
+            free_drum2d(voices[i].drum_mesh);
+        }
+    }
+    free(voices);
+    free(output_audio);
+
+    printf("Zrobione! Otworz plik: wynik.wav\n\n");
+    return 0;
+}
+
+/*
 int main() {
     init_noise_generator();
     int sample_rate = 44100;
@@ -93,7 +215,7 @@ int main() {
     printf("Otworz plik: orkiestra.wav\n\n");6
     return 0;
 }
-
+*/
 
 
 /*

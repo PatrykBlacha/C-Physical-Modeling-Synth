@@ -14,6 +14,7 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
         for (size_t v = 0; v < num_voices; v++) {
 
             float envelope = 1.0f;  //startowa głośność
+            float previous_noise = 0.0f; // pamięc dla mloteczka
 
             if (current_time >= voices[v].start_time_sec && voices[v].has_been_plucked == 0) {
 
@@ -25,6 +26,19 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                     if (voices[v].mode == MODE_DRUM || voices[v].mode == MODE_SNARE) {
                         noise *= envelope; 
                         envelope *= 0.95f;  //sciszamh szum zgodnie z obwiednią- obwiednia 5% w dól
+                    }
+                    else if (voices[v].mode == MODE_PIANO) {
+                        //filtr dolnoprzepustowy
+                        noise = 0.5f * noise + 0.5f * previous_noise;
+                        previous_noise = noise;
+                        
+                        // uderzenie w czesc struny
+                        noise *= envelope;
+                        envelope *= 0.99f;  //szerokie uderzenie- powolny spadek
+                    }
+                    else if (voices[v].mode == MODE_FDTD_DRUM) {
+                        // Uderzamy w środek siatki z siłą 1.0
+                        strike_drum2d(voices[v].drum_mesh, GRID_SIZE / 2, GRID_SIZE / 2, 1.0f);
                     }
                     
                     push_sample(voices[v].delay_line, noise);
@@ -90,14 +104,19 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                     voices[v].ap_prev_out = ap_out;
                     
                     processed_sample = ap_out;
+                } else if (voices[v].mode == MODE_FDTD_DRUM) {
+                    // Cała matematyka zamknięta jest w zewnętrznym module!
+                    processed_sample = process_drum2d(voices[v].drum_mesh); 
                 }
 
-                //Damping
-                processed_sample *= voices[v].damping;
+                if (voices[v].mode != MODE_FDTD_DRUM) {
+                    //Damping
+                    processed_sample *= voices[v].damping;
 
-                //sprzężenie zwrotne
-                push_sample(voices[v].delay_line, processed_sample);
-                voices[v].previous_sample = current_sample;
+                    //sprzężenie zwrotne
+                    push_sample(voices[v].delay_line, processed_sample);
+                    voices[v].previous_sample = current_sample;
+                }
 
                 //miksowanie
                 mixed_sample += processed_sample;
