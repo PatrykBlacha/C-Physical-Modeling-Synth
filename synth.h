@@ -8,7 +8,8 @@ typedef enum {
     MODE_STRING, //tryb strunowy
     MODE_DRUM,    //perkusyjny
     MODE_SNARE,    //werbel z filtrem pasmowym
-    MODE_HIHAT       //talerze z modulacja
+    MODE_HIHAT,       //talerze z modulacja
+    MODE_PIANO
 } InstrumentMode;
 
 typedef struct {
@@ -23,6 +24,9 @@ typedef struct {
     int has_been_plucked;    //czy teraz gra
 
     float hpf_state;    //pamiec filtra gornoprzepustowego dla mode_snare
+
+    float ap_prev_in;
+    float ap_prev_out;
 } Voice;
 
 //petla karplusa

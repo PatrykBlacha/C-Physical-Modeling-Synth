@@ -75,6 +75,21 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                     float hpf_out = processed_sample - voices[v].hpf_state;
                     voices[v].hpf_state = processed_sample;
                     processed_sample = hpf_out;
+                } else if (voices[v].mode == MODE_PIANO) {
+                    // 1. Uderzenie miękkim młotkiem (lekki filtr dolnoprzepustowy na wejściu)
+                    float smoothed = (voices[v].alpha * current_sample) + ((1.0f - voices[v].alpha) * voices[v].previous_sample);
+                    
+                    // 2. Filtr Wszechprzepustowy (Sztywność struny)
+                    // Parametr 'c' kontroluje sztywność. (0.0 to gumka, 0.6 to gruby drut)
+                    float c = 0.5f; 
+                    
+                    float ap_out = (c * smoothed) + voices[v].ap_prev_in - (c * voices[v].ap_prev_out);
+                    
+                    // Zapisujemy stany do pamięci na następny obieg
+                    voices[v].ap_prev_in = smoothed;
+                    voices[v].ap_prev_out = ap_out;
+                    
+                    processed_sample = ap_out;
                 }
 
                 //Damping

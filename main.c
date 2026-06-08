@@ -37,9 +37,9 @@ int main() {
 
         printf("\n--- KONFIGURACJA GLOSU %d ---\n", i + 1);
         
-        printf("Wybierz instrument (0=STRUNA, 1=STOPA/TOM, 2=WERBEL, 3=HI-HAT): ");
+        printf("Wybierz instrument (0=STRUNA, 1=STOPA, 2=WERBEL, 3=HI-HAT, 4=PIANINO): ");
         scanf("%d", &mode_input);
-        if (mode_input < 0 || mode_input > 3) mode_input = 0; // Zabezpieczenie przed zlym wpisem
+        if (mode_input < 0 || mode_input > 4) mode_input = 0; //zabiezpieczenie
 
         printf("Czestotliwosc w Hz (np. bas=82, werbel=120, hihat=300): ");
         scanf("%f", &freq);
@@ -65,6 +65,9 @@ int main() {
         voices[i].damping = damping;
         voices[i].alpha = alpha;
         voices[i].previous_sample = 0.0f;
+
+        voices[i].ap_prev_in = 0.0f;
+        voices[i].ap_prev_out = 0.0f;
         
         //mapowanie wpisanej liczby na tryb instrumentu
         voices[i].mode = (InstrumentMode)mode_input; 
@@ -78,7 +81,7 @@ int main() {
     // Renderowanie 
     synthesize_poly(voices, num_voices, output_audio, num_samples);
 
-    save_to_wav("perkusja.wav", output_audio, num_samples, sample_rate);
+    save_to_wav("pianino2.wav", output_audio, num_samples, sample_rate);
 
     // Sprzątanie
     for (int i = 0; i < num_voices; i++) {
@@ -87,7 +90,7 @@ int main() {
     free(voices);
     free(output_audio);
 
-    printf("Otworz plik: orkiestra.wav\n\n");
+    printf("Otworz plik: orkiestra.wav\n\n");6
     return 0;
 }
 
