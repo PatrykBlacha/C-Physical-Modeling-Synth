@@ -1,5 +1,6 @@
 #include "synth.h"
 #include <stdlib.h>
+#include <stdio.h>
 #include"core.h"
 
 void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num_samples) {
@@ -17,6 +18,15 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
             float previous_noise = 0.0f; // pamięc dla mloteczka
 
             if (current_time >= voices[v].start_time_sec && voices[v].has_been_plucked == 0) {
+
+
+                if (voices[v].mode == MODE_FDTD_GONG || voices[v].mode == MODE_FDTD_CIRCULAR) {
+                    int strike_x = (int)(GRID_SIZE * 0.37f);
+                    int strike_y = (int)(GRID_SIZE * 0.61f);
+                    strike_drum2d(voices[v].drum_mesh, strike_x, strike_y, 0.4f);
+                    //int strike_pos = (int)(GRID_SIZE * 0.6f);
+                    //strike_drum2d(voices[v].drum_mesh, strike_pos, strike_pos, 0.3f); // Jedno mocniejsze uderzenie
+                }
 
                 //szarpnięcie struny, szum do bufora
                 for (size_t j = 0; j < voices[v].delay_line->size; j++) {
@@ -36,10 +46,12 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                         noise *= envelope;
                         envelope *= 0.99f;  //szerokie uderzenie- powolny spadek
                     }
-                    else if (voices[v].mode == MODE_FDTD_DRUM) {
+                    /*
+                    else if (voices[v].mode == MODE_FDTD_GONG || voices[v].mode == MODE_FDTD_CIRCULAR) {
                         // Uderzamy w środek siatki z siłą 1.0
                         strike_drum2d(voices[v].drum_mesh, GRID_SIZE / 2, GRID_SIZE / 2, 1.0f);
                     }
+                    */
                     
                     push_sample(voices[v].delay_line, noise);
                 }
@@ -90,26 +102,37 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                     voices[v].hpf_state = processed_sample;
                     processed_sample = hpf_out;
                 } else if (voices[v].mode == MODE_PIANO) {
-                    // 1. Uderzenie miękkim młotkiem (lekki filtr dolnoprzepustowy na wejściu)
+                    //uderzenie miękkim młotkiem lekki filtr dolnoprzepustowy na wejściu
                     float smoothed = (voices[v].alpha * current_sample) + ((1.0f - voices[v].alpha) * voices[v].previous_sample);
                     
-                    // 2. Filtr Wszechprzepustowy (Sztywność struny)
-                    // Parametr 'c' kontroluje sztywność. (0.0 to gumka, 0.6 to gruby drut)
+                    //parametr sztynosci filtru wszechprzepustowego
                     float c = 0.5f; 
                     
                     float ap_out = (c * smoothed) + voices[v].ap_prev_in - (c * voices[v].ap_prev_out);
                     
-                    // Zapisujemy stany do pamięci na następny obieg
+                    //zapisujemy stany do pamięci na następny obieg
                     voices[v].ap_prev_in = smoothed;
                     voices[v].ap_prev_out = ap_out;
                     
                     processed_sample = ap_out;
-                } else if (voices[v].mode == MODE_FDTD_DRUM) {
-                    // Cała matematyka zamknięta jest w zewnętrznym module!
-                    processed_sample = process_drum2d(voices[v].drum_mesh); 
+                } else if (voices[v].mode == MODE_FDTD_GONG || voices[v].mode == MODE_FDTD_CIRCULAR) {
+                    //ponieważ środek siatki może mieć małą amplitudę dajemy mu lekkie wzmocnienie
+                    float raw_mesh_sample = process_drum2d(voices[v].drum_mesh) * 2.0f; 
+                    
+                    if (voices[v].mode == MODE_FDTD_CIRCULAR) {
+                        //łagodny filtr dolnoprzepustowy na metal
+                        //processed_sample = (0.95f * raw_mesh_sample) + (0.05f * voices[v].previous_sample);
+                        
+                        //voices[v].previous_sample = processed_sample; 
+                        //processed_sample = raw_mesh_sample;
+                        processed_sample = (voices[v].alpha * raw_mesh_sample) + ((1.0f - voices[v].alpha) * voices[v].previous_sample);
+                        voices[v].previous_sample = processed_sample;
+                    } else {
+                        processed_sample = raw_mesh_sample;
+                    }
                 }
 
-                if (voices[v].mode != MODE_FDTD_DRUM) {
+                if (voices[v].mode != MODE_FDTD_GONG && voices[v].mode != MODE_FDTD_CIRCULAR) {
                     //Damping
                     processed_sample *= voices[v].damping;
 
@@ -125,13 +148,20 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
 
         //zabezpieczenie na clipping
         if (num_voices > 0) {
-            output[i] = mixed_sample / (float)num_voices;
+            float final_out = mixed_sample / (float)num_voices;
+            
+            if (final_out > 1.0f){
+                final_out = 1.0f;
+                printf("Wszedł clipping");
+            } 
+            if (final_out < -1.0f) final_out = -1.0f;
+            
+            output[i] = final_out;
         } else {
             output[i] = 0.0f;
         }
     }
 }
-
 
 /*
 #include "synth.h"

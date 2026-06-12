@@ -12,7 +12,8 @@ typedef enum {
     MODE_SNARE,    //werbel z filtrem pasmowym
     MODE_HIHAT,       //talerze z modulacja
     MODE_PIANO,
-    MODE_FDTD_DRUM
+    MODE_FDTD_GONG,
+    MODE_FDTD_CIRCULAR
 } InstrumentMode;
 
 typedef struct {
