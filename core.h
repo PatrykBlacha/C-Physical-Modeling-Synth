@@ -14,6 +14,7 @@ CircularBuffer* create_buffer(size_t size);
 void free_buffer(CircularBuffer* cb);
 void push_sample(CircularBuffer* cb, float sample);
 float read_sample(CircularBuffer* cb, size_t delay);
+float read_sample_interpolated(CircularBuffer* cb, float delay);
 
 //do white noise
 void init_noise_generator();

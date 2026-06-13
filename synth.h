@@ -42,6 +42,10 @@ typedef struct {
     float amp_envelope;      // obwiednia amplitudy wyjściowej
     float attack_samples;    // ile próbek trwa atak
 
+    float exact_delay;
+
+    float ap_coef;
+
     Drum2D* drum_mesh;
 } Voice;
 

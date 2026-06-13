@@ -71,7 +71,22 @@ int main() {
         if (mode_input < 0 || mode_input > 7) mode_input = 0; // Zabezpieczenie
 
         //wstrzykniecie wartosci do struny (Zostaje jak było)
-        size_t buffer_size = (size_t)(sample_rate / freq);
+        float inharmonicity = 0.0002f * freq; 
+        if (inharmonicity > 0.6f) inharmonicity = 0.6f; // Limit bezpieczeństwa
+
+        voices[i].ap_coef = inharmonicity; // Zapisz to w struct Voice!
+
+        // Obliczamy ile próbek opóźnienia dodaje Allpass przy DC (częstotliwość 0 Hz)
+        // Wzór dla filtra y[n] = -c*x[n] + x[n-1] + c*y[n-1] to ok. (1 - c)/(1 + c)
+        float allpass_delay = (1.0f - voices[i].ap_coef) / (1.0f + voices[i].ap_coef);
+
+        // KOMPENSACJA: Skracamy główną strunę o to, co dodaje Allpass (np. x2 jeśli masz dwa filtry)
+        voices[i].exact_delay = ((float)sample_rate / freq) - (2.0f * allpass_delay);
+
+        // Zabezpieczenie dla bardzo krótkich strun (wysokie tony)
+        if (voices[i].exact_delay < 2.0f) voices[i].exact_delay = 2.0f;
+
+        size_t buffer_size = (size_t)voices[i].exact_delay + 2;
         voices[i].delay_line = create_buffer(buffer_size);
 
         voices[i].ap2_prev_in  = 0.0f;

@@ -34,6 +34,16 @@ float read_sample(CircularBuffer* cb, size_t delay) {
     return cb->data[read_idx];
 }
 
+float read_sample_interpolated(CircularBuffer* cb, float delay) {
+    size_t delay_int = (size_t)delay;
+    float frac = delay - (float)delay_int;
+    
+    float s1 = read_sample(cb, delay_int);
+    float s2 = read_sample(cb, delay_int + 1);
+    
+    return s1 + frac * (s2 - s1);
+}
+
 
 void init_noise_generator() {
     srand((unsigned int)time(NULL));
