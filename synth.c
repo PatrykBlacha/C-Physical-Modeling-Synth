@@ -33,16 +33,45 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                     voices[v].brightness   = 1.0f;
                     voices[v].sample_count = 0;
                     voices[v].amp_envelope = 1.0f;
+
+                    // fc proporcjonalne do częstotliwości struny
+                    // Chcemy fc ≈ 2 * fund_freq żeby przepuścić fundament + pierwszą harmoniczną
+                    float fund_freq = 44100.0f / (float)voices[v].delay_line->size;
+                    // alpha = 2π * fc / sr,  ale LP: y = alpha*x + (1-alpha)*y_prev
+                    // fc = 3 * fund_freq żeby mieć margines
+                    float lp_alpha = (2.0f * 3.14159f * fund_freq * 3.0f) / 44100.0f;
+                    if (lp_alpha > 0.95f) lp_alpha = 0.95f;  // zabezpieczenie dla wysokich nut
                     
-                    // Wzbudź jedną sinusoidę o docelowej częstotliwości
-                    // freq = sr / buffer_size
-                    float fund_freq = 44100.0f / (float)voices[v].delay_line->size; //zhardocodowany smaple_rate niestety
-                    for (size_t j = 0; j < voices[v].delay_line->size; j++) {
-                        float phase = 2.0f * 3.14159265f * fund_freq * j / 44100.0f;    //tu też hardcode sr
-                        // Obwiednia Hanninga — wygładza krawędzie, redukuje klikanie
-                        float hann = 0.5f * (1.0f - cosf(2.0f * 3.14159265f * j / (float)(voices[v].delay_line->size - 1)));
-                        push_sample(voices[v].delay_line, sinf(phase) * hann * 0.8f);
+                    // Trzy przejścia LP przez bufor — kaskada wzmacnia tłumienie
+                    float buf[2048] = {0};  // bufor tymczasowy, zakładamy max 2048
+                    size_t bsize = voices[v].delay_line->size;
+                    
+                    // Generuj szum
+                    for (size_t j = 0; j < bsize; j++)
+                        buf[j] = generate_white_noise();
+                    
+                    // Przejście 1
+                    float pn = 0.0f;
+                    for (size_t j = 0; j < bsize; j++) {
+                        pn = lp_alpha * buf[j] + (1.0f - lp_alpha) * pn;
+                        buf[j] = pn;
                     }
+                    // Przejście 2
+                    pn = 0.0f;
+                    for (size_t j = 0; j < bsize; j++) {
+                        pn = lp_alpha * buf[j] + (1.0f - lp_alpha) * pn;
+                        buf[j] = pn;
+                    }
+                    // Przejście 3
+                    pn = 0.0f;
+                    for (size_t j = 0; j < bsize; j++) {
+                        pn = lp_alpha * buf[j] + (1.0f - lp_alpha) * pn;
+                        buf[j] = pn;
+                    }
+                    
+                    // Wstaw przefiltrowany szum do bufora KS
+                    for (size_t j = 0; j < bsize; j++)
+                        push_sample(voices[v].delay_line, buf[j]);
                 } else{
                 //szarpnięcie struny, szum do bufora
                     for (size_t j = 0; j < voices[v].delay_line->size; j++) {
@@ -126,15 +155,21 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                 } else if (voices[v].mode == MODE_PIANO) {
                     voices[v].sample_count++;
 
-                    // Brightness — ciemnienie barwy w czasie
-                    voices[v].brightness *= 0.999955f;
-                    float dynamic_alpha = 0.5f + 0.2f * voices[v].brightness;
+                    // Obwiednia: -6dB po 2s (zamiast po 1s)
+                    // 0.5^(1/(2*44100)) = 0.999992
+                    voices[v].amp_envelope *= 0.999992f;
+
+                    // Brightness: zaczyna od 1.0 (jasno), schodzi do 0.0 w ~1s
+                    // Ale dynamic_alpha NIE może schodzić poniżej 0.85 — inaczej KS traci energię
+                    voices[v].brightness *= 0.999977f;  // tau ≈ 0.65s
+                    // alpha: 0.98 (jasny, mało tłumi) → 0.85 (ciemniejszy)
+                    float dynamic_alpha = 0.85f + 0.13f * voices[v].brightness;
 
                     // LP w pętli sprzężenia
                     float smoothed = dynamic_alpha * current_sample
                                 + (1.0f - dynamic_alpha) * voices[v].previous_sample;
 
-                    // Allpass 1: fractional delay
+                    // Allpass 1
                     float c = 0.05f;
                     float ap_out = -c * smoothed
                                 + voices[v].ap_prev_in
@@ -142,7 +177,7 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                     voices[v].ap_prev_in  = smoothed;
                     voices[v].ap_prev_out = ap_out;
 
-                    // Allpass 2: dyspersja
+                    // Allpass 2
                     float b = 0.03f;
                     float ap2_out = -b * ap_out
                                 + voices[v].ap2_prev_in
@@ -150,8 +185,7 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                     voices[v].ap2_prev_in  = ap_out;
                     voices[v].ap2_prev_out = ap2_out;
 
-                    // BEZ env_gain — najpierw sprawdzamy czy rezonuje
-                    processed_sample = ap2_out;
+                    processed_sample = ap2_out * voices[v].amp_envelope;
                 } else if (voices[v].mode == MODE_FDTD_GONG || voices[v].mode == MODE_FDTD_METALIC || voices[v].mode== MODE_FDTD_DRUM) {
                     
                     int is_drum = (voices[v].mode == MODE_FDTD_DRUM) ? 1 : 0;
