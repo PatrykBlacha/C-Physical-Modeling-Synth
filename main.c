@@ -73,6 +73,15 @@ int main() {
         //wstrzykniecie wartosci do struny (Zostaje jak było)
         size_t buffer_size = (size_t)(sample_rate / freq);
         voices[i].delay_line = create_buffer(buffer_size);
+
+        voices[i].ap2_prev_in  = 0.0f;
+        voices[i].ap2_prev_out = 0.0f;
+
+        voices[i].brightness   = 1.0f;
+        voices[i].sample_count = 0;
+
+        voices[i].amp_envelope   = 0.0f;
+        voices[i].attack_samples = 0.0f;
         
         for(size_t j = 0; j < buffer_size; j++) {
             push_sample(voices[i].delay_line, 0.0f); 

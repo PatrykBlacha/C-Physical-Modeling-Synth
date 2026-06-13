@@ -33,6 +33,15 @@ typedef struct {
     float ap_prev_in;
     float ap_prev_out;
 
+    float ap2_prev_in;   // allpass 2. rzędu - wejście
+    float ap2_prev_out;
+
+    float brightness;      // aktualny cutoff LP (opada w czasie)
+    size_t sample_count;
+
+    float amp_envelope;      // obwiednia amplitudy wyjściowej
+    float attack_samples;    // ile próbek trwa atak
+
     Drum2D* drum_mesh;
 } Voice;
 
