@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include"core.h"
+#include <math.h>
 
 void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num_samples) {
     
@@ -20,9 +21,9 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
             if (current_time >= voices[v].start_time_sec && voices[v].has_been_plucked == 0) {
 
 
-                if (voices[v].mode == MODE_FDTD_GONG || voices[v].mode == MODE_FDTD_CIRCULAR) {
-                    int strike_x = (int)(GRID_SIZE * 0.37f);
-                    int strike_y = (int)(GRID_SIZE * 0.61f);
+                if (voices[v].mode == MODE_FDTD_GONG || voices[v].mode == MODE_FDTD_METALIC || voices[v].mode== MODE_FDTD_DRUM) {
+                    int strike_x = (int)(GRID_SIZE * 0.38f);
+                    int strike_y = (int)(GRID_SIZE * 0.58f);
                     strike_drum2d(voices[v].drum_mesh, strike_x, strike_y, 0.4f);
                     //int strike_pos = (int)(GRID_SIZE * 0.6f);
                     //strike_drum2d(voices[v].drum_mesh, strike_pos, strike_pos, 0.3f); // Jedno mocniejsze uderzenie
@@ -37,14 +38,45 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                         noise *= envelope; 
                         envelope *= 0.95f;  //sciszamh szum zgodnie z obwiednią- obwiednia 5% w dól
                     }
+                    /*
                     else if (voices[v].mode == MODE_PIANO) {
                         //filtr dolnoprzepustowy
-                        noise = 0.5f * noise + 0.5f * previous_noise;
+                        //noise = 0.2f * noise + 0.8f * previous_noise;
+                        //previous_noise = noise;
+                        float new_noise = generate_white_noise();
+                        noise = 0.05f * new_noise + 0.95f * previous_noise;
                         previous_noise = noise;
                         
                         // uderzenie w czesc struny
                         noise *= envelope;
                         envelope *= 0.99f;  //szerokie uderzenie- powolny spadek
+                    }
+                        */
+                    else if (voices[v].mode == MODE_PIANO) {
+                        // Pianino to instrument uderzany! Młoteczek dotyka tylko ułamka struny.
+                        size_t strike_width = voices[v].delay_line->size / 8; 
+                        if (strike_width == 0) strike_width = 1; // Zabezpieczenie dla bardzo wysokich nut
+                        
+                        if (j < strike_width) {
+                            // Model miękkiego, filcowego młoteczka - połówka sinusoidy
+                            float phase = (float)j / (float)strike_width;
+                            float hammer_pulse = sinf(3.14159f * phase); 
+                            
+                            // Dokładamy odrobinę przefiltrowanego szumu, aby zachować 
+                            // lekko mechaniczny charakter uderzenia
+                            float new_noise = generate_white_noise();
+                            noise = 0.05f * new_noise + 0.95f * previous_noise;
+                            previous_noise = noise;
+                            
+                            // Mieszamy profil młoteczka z "brudem" mechanizmu
+                            noise = hammer_pulse * (0.8f + 0.2f * noise);
+                            
+                            // Skalowanie obwiednią jeśli potrzebujesz zachować globalną głośność
+                            noise *= envelope; 
+                        } else {
+                            // Pozostała część struny początkowo spoczywa
+                            noise = 0.0f;
+                        }
                     }
                     /*
                     else if (voices[v].mode == MODE_FDTD_GONG || voices[v].mode == MODE_FDTD_CIRCULAR) {
@@ -106,7 +138,7 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                     float smoothed = (voices[v].alpha * current_sample) + ((1.0f - voices[v].alpha) * voices[v].previous_sample);
                     
                     //parametr sztynosci filtru wszechprzepustowego
-                    float c = 0.5f; 
+                    float c = 0.4f; 
                     
                     float ap_out = (c * smoothed) + voices[v].ap_prev_in - (c * voices[v].ap_prev_out);
                     
@@ -115,11 +147,14 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                     voices[v].ap_prev_out = ap_out;
                     
                     processed_sample = ap_out;
-                } else if (voices[v].mode == MODE_FDTD_GONG || voices[v].mode == MODE_FDTD_CIRCULAR) {
-                    //ponieważ środek siatki może mieć małą amplitudę dajemy mu lekkie wzmocnienie
-                    float raw_mesh_sample = process_drum2d(voices[v].drum_mesh) * 2.0f; 
+                } else if (voices[v].mode == MODE_FDTD_GONG || voices[v].mode == MODE_FDTD_METALIC || voices[v].mode== MODE_FDTD_DRUM) {
                     
-                    if (voices[v].mode == MODE_FDTD_CIRCULAR) {
+                    int is_drum = (voices[v].mode == MODE_FDTD_DRUM) ? 1 : 0;
+
+                    //ponieważ środek siatki może mieć małą amplitudę dajemy mu lekkie wzmocnienie
+                    float raw_mesh_sample = process_drum2d(voices[v].drum_mesh, is_drum) * 2.0f; 
+                    
+                    if (voices[v].mode == MODE_FDTD_METALIC || voices[v].mode== MODE_FDTD_DRUM) {
                         //łagodny filtr dolnoprzepustowy na metal
                         //processed_sample = (0.95f * raw_mesh_sample) + (0.05f * voices[v].previous_sample);
                         
@@ -132,7 +167,7 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                     }
                 }
 
-                if (voices[v].mode != MODE_FDTD_GONG && voices[v].mode != MODE_FDTD_CIRCULAR) {
+                if (voices[v].mode != MODE_FDTD_GONG && voices[v].mode != MODE_FDTD_METALIC && voices[v].mode!= MODE_FDTD_DRUM) {
                     //Damping
                     processed_sample *= voices[v].damping;
 

@@ -1,7 +1,7 @@
 #ifndef FDTD_DRUM_H
 #define FDTD_DRUM_H
 
-#define GRID_SIZE 80 // Rozdzielczość bębna (np. 40x40 węzłów)
+#define GRID_SIZE 120 // Rozdzielczość bębna (np. 40x40 węzłów)
 
 // Struktura naszej wirtualnej membrany
 typedef struct {
@@ -17,7 +17,7 @@ typedef struct {
 // Funkcje do obsługi bębna
 Drum2D* create_drum2d(float rho, float damping, int is_circular);
 void strike_drum2d(Drum2D* drum, int x, int y, float force);
-float process_drum2d(Drum2D* drum);
+float process_drum2d(Drum2D* drum, int is_drum);
 void free_drum2d(Drum2D* drum);
 
 #endif

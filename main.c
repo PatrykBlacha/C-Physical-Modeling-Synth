@@ -68,7 +68,7 @@ int main() {
             return 1;
         }
 
-        if (mode_input < 0 || mode_input > 6) mode_input = 0; // Zabezpieczenie
+        if (mode_input < 0 || mode_input > 7) mode_input = 0; // Zabezpieczenie
 
         //wstrzykniecie wartosci do struny (Zostaje jak było)
         size_t buffer_size = (size_t)(sample_rate / freq);
@@ -91,9 +91,12 @@ int main() {
         if (voices[i].mode == MODE_FDTD_GONG) {
             //rho = 0.70f (Maksymalne stabilne naprężenie wg warunku CFL)
             voices[i].drum_mesh = create_drum2d(0.15f, damping,0);
-        } else if (voices[i].mode == MODE_FDTD_CIRCULAR) {
+        } else if (voices[i].mode == MODE_FDTD_METALIC) {
             voices[i].drum_mesh = create_drum2d(0.5f, damping, 1); // 1 = Koło
-        } else {
+        } else if (voices[i].mode == MODE_FDTD_DRUM){
+            voices[i].drum_mesh = create_drum2d(0.35f, damping, 0); // 42 jest ok
+        } 
+        else {
             voices[i].drum_mesh = NULL; 
         }
 
@@ -115,7 +118,7 @@ int main() {
         free_buffer(voices[i].delay_line);
         
         //siatka 2d
-        if (voices[i].mode == MODE_FDTD_GONG || voices[i].mode == MODE_FDTD_CIRCULAR) {
+        if (voices[i].mode == MODE_FDTD_GONG || voices[i].mode == MODE_FDTD_METALIC || voices[i].mode== MODE_FDTD_DRUM) {
             free_drum2d(voices[i].drum_mesh);
         }
     }

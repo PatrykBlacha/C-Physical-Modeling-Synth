@@ -13,7 +13,8 @@ typedef enum {
     MODE_HIHAT,       //talerze z modulacja
     MODE_PIANO,
     MODE_FDTD_GONG,
-    MODE_FDTD_CIRCULAR
+    MODE_FDTD_METALIC, 
+    MODE_FDTD_DRUM
 } InstrumentMode;
 
 typedef struct {
