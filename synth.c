@@ -5,7 +5,13 @@
 #include <math.h>
 
 void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num_samples) {
-    
+
+    CircularBuffer* comb1 = create_buffer(1557);
+    CircularBuffer* comb2 = create_buffer(1617);
+    CircularBuffer* comb3 = create_buffer(1491);
+    CircularBuffer* comb4 = create_buffer(1422);
+    float rev_feedback = 0.85f;
+
     //petla po nagraniu
     for (size_t i = 0; i < num_samples; i++) {
         float mixed_sample = 0.0f; //próbka na wszystkie struny
@@ -26,8 +32,6 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                     int strike_x = (int)(GRID_SIZE * 0.38f);
                     int strike_y = (int)(GRID_SIZE * 0.58f);
                     strike_drum2d(voices[v].drum_mesh, strike_x, strike_y, 0.4f);
-                    //int strike_pos = (int)(GRID_SIZE * 0.6f);
-                    //strike_drum2d(voices[v].drum_mesh, strike_pos, strike_pos, 0.3f); // Jedno mocniejsze uderzenie
                 }
                 
                 if (voices[v].mode == MODE_PIANO) {
@@ -263,18 +267,43 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
         //zabezpieczenie na clipping
         if (num_voices > 0) {
             float final_out = mixed_sample / (float)num_voices;
-            
-            if (final_out > 1.0f){
-                final_out = 1.0f;
-                printf("Wszedł clipping");
-            } 
+            if (final_out > 1.0f) final_out = 1.0f; 
             if (final_out < -1.0f) final_out = -1.0f;
             
-            output[i] = final_out;
+            // --- POGŁOS PUDŁA REZONANSOWEGO ---
+            float dry = final_out;
+            
+            // Odczyt z "ścian" pudła
+            float c1_out = read_sample(comb1, comb1->size);
+            float c2_out = read_sample(comb2, comb2->size);
+            float c3_out = read_sample(comb3, comb3->size);
+            float c4_out = read_sample(comb4, comb4->size);
+            
+            // Sumowanie echa
+            float wet = (c1_out + c2_out + c3_out + c4_out) * 0.25f;
+            
+            // Wpychanie nowego dźwięku do pudła (z odbiciem)
+            push_sample(comb1, dry + c1_out * rev_feedback);
+            push_sample(comb2, dry + c2_out * rev_feedback);
+            push_sample(comb3, dry + c3_out * rev_feedback);
+            push_sample(comb4, dry + c4_out * rev_feedback);
+            
+            // Miksowanie sygnału suchego z mokrym (60% strun, 40% pudła)
+            float output_mixed = (dry * 0.6f) + (wet * 0.4f);
+            
+            // Ostateczny clipping
+            if (output_mixed > 1.0f) output_mixed = 1.0f;
+            if (output_mixed < -1.0f) output_mixed = -1.0f;
+            
+            output[i] = output_mixed;
         } else {
             output[i] = 0.0f;
         }
     }
+    free_buffer(comb1);
+    free_buffer(comb2);
+    free_buffer(comb3);
+    free_buffer(comb4);
 }
 
 /*
