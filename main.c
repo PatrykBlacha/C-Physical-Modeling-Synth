@@ -12,7 +12,7 @@ int main() {
 
     printf("\n=== SEKWEKCER KARPLUS-STRONG (Z PLIKU) ===\n");
 
-    //ZAPytanie o nazwę pliku
+    //ZAPytanie o nazwę plikus
     char filename[100];
     printf("Podaj nazwe pliku z parametrami: ");
     scanf("%99s", filename);
@@ -59,18 +59,26 @@ int main() {
 
     //pętla wczytująca kolejne linijki instrumentów
     for (int i = 0; i < num_voices; i++) {
-        float freq, damping, alpha, start_time;
+        //float freq, damping, alpha, start_time;
         int mode_input;
 
+        /*
         if (fscanf(file, "%d %f %f %f %f", &mode_input, &freq, &damping, &alpha, &start_time) != 5) {
             printf("Blad formatu danych w linii %d!\n", i + 2);
             fclose(file);
             return 1;
         }
+            */
+
+        if (fscanf(file, "%d", &mode_input) != 1) {
+            printf("Blad formatu danych (brak trybu) w linii %d!\n", i + 2);
+            fclose(file);
+            return 1;
+        }
 
         if (mode_input < 0 || mode_input > 7) mode_input = 0; // Zabezpieczenie
-
-        //wstrzykniecie wartosci do struny (Zostaje jak było)
+        /*
+        //wstrzykniecie wartosci do struny
         float inharmonicity = 0.0002f * freq; 
         if (inharmonicity > 0.6f) inharmonicity = 0.6f; // Limit bezpieczeństwa
 
@@ -127,7 +135,73 @@ int main() {
         voices[i].is_active = 0;
         voices[i].has_been_plucked = 0;
         voices[i].start_time_sec = start_time;
-    }
+        */
+
+        voices[i].mode = (InstrumentMode)mode_input;
+        voices[i].is_active = 0;
+        voices[i].has_been_plucked = 0;
+        voices[i].previous_sample = 0.0f;
+        voices[i].amp_envelope = 0.0f;
+        voices[i].sample_count = 0;
+        
+       if (voices[i].mode == MODE_FDTD_GONG || voices[i].mode == MODE_FDTD_METALIC || voices[i].mode == MODE_FDTD_DRUM) {
+            
+            //Format: Tryb | Rho | Damping | Alpha | StartTime
+            float rho, damping, alpha, start_time;
+            if (fscanf(file, "%f %f %f %f", &rho, &damping, &alpha, &start_time) != 4) {
+                printf("Blad parametrow FDTD w linii %d!\n", i + 2); return 1;
+            }
+
+            voices[i].damping = damping;
+            voices[i].alpha = alpha;
+            voices[i].start_time_sec = start_time;
+            
+            //kształt bębna
+            int shape = (voices[i].mode == MODE_FDTD_METALIC) ? 1 : 0; 
+            voices[i].drum_mesh = create_drum2d(rho, damping, shape);
+            
+            //nie używne przez FDTD
+            voices[i].delay_line = NULL;
+       } else {
+            //Format: Tryb | Freq | Damping | Alpha | StartTime
+            float freq, damping, alpha, start_time;
+            if (fscanf(file, "%f %f %f %f", &freq, &damping, &alpha, &start_time) != 4) {
+                printf("Blad parametrow Karplus-Strong w linii %d!\n", i + 2); return 1;
+            }
+
+            voices[i].damping = damping;
+            voices[i].alpha = alpha;
+            voices[i].start_time_sec = start_time;
+            
+            voices[i].drum_mesh = NULL;
+
+            //parametry dla struny 
+            float inharmonicity = 0.0002f * freq; 
+            if (inharmonicity > 0.6f) inharmonicity = 0.6f; 
+
+            voices[i].ap_coef = inharmonicity; 
+
+            float allpass_delay = (1.0f - voices[i].ap_coef) / (1.0f + voices[i].ap_coef);
+            voices[i].exact_delay = ((float)sample_rate / freq) - (2.0f * allpass_delay);
+
+            if (voices[i].exact_delay < 2.0f) voices[i].exact_delay = 2.0f;
+
+            size_t buffer_size = (size_t)voices[i].exact_delay + 2;
+            voices[i].delay_line = create_buffer(buffer_size);
+
+            for(size_t j = 0; j < buffer_size; j++) {
+                push_sample(voices[i].delay_line, 0.0f); 
+            }
+
+            // Inicjalizacja filtrów
+            voices[i].ap2_prev_in  = 0.0f;
+            voices[i].ap2_prev_out = 0.0f;
+            voices[i].ap_prev_in = 0.0f;
+            voices[i].ap_prev_out = 0.0f;
+            voices[i].brightness   = 1.0f;
+            voices[i].attack_samples = 0.0f;
+        }
+    } 
 
     fclose(file);
 

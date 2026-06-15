@@ -14,7 +14,8 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
 
     //petla po nagraniu
     for (size_t i = 0; i < num_samples; i++) {
-        float mixed_sample = 0.0f; //próbka na wszystkie struny
+        float mixed_others = 0.0f; //próbka na wszystkie struny
+        float mixed_piano = 0.0f;
 
         float current_time = (float)i / 44100.0f;   //czas w sekundach
         
@@ -49,8 +50,8 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                     if (lp_alpha > 0.95f) lp_alpha = 0.95f;
                     
                     // Trzy przejścia LP przez bufor — kaskada wzmacnia tłumienie
-                    float buf[2048] = {0};  // bufor tymczasowy, zakładamy max 2048
                     size_t bsize = voices[v].delay_line->size;
+                    float* buf = (float*)calloc(bsize, sizeof(float));
                     
                     // Generuj szum
                     //for (size_t j = 0; j < bsize; j++)
@@ -68,11 +69,13 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                             float phase = (float)j / (float)strike_width;
                             
                             float hammer_noise = generate_white_noise() * (1.0f - phase);
-                            hammer_noise *= hammer_noise; 
+                            hammer_noise = hammer_noise * hammer_noise * hammer_noise; // Do sześcianu dla drastycznie krótszego "cyknięcia"
 
+                            // Głuchy thump zostaje, ale wyciszamy całość
                             float wood_thump = sinf(3.14159f * phase); 
 
-                            buf[j] = (hammer_noise * 0.4f) + (wood_thump * 0.6f);
+                            // Miks: Zaledwie 15% szumu i 85% głuchego drewna, dodatkowo całość mocno ściszona (* 0.4f)
+                            buf[j] = ((hammer_noise * 0.15f) + (wood_thump * 0.85f)) * 0.4f;
                         } else {
                             buf[j] = 0.0f; // Reszta struny musi milczeć!
                         }
@@ -106,8 +109,9 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                     
                     // Wstaw przefiltrowany szum do bufora KS
                     for (size_t j = 0; j < bsize; j++)
-                        push_sample(voices[v].delay_line, buf[j]);
-                } else{
+                        push_sample(voices[v].delay_line, buf[j]);  
+                    free(buf);
+                } else if (voices[v].delay_line!=NULL){
                 //szarpnięcie struny, szum do bufora
                     for (size_t j = 0; j < voices[v].delay_line->size; j++) {
                         float noise = generate_white_noise();
@@ -154,20 +158,23 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                 float processed_sample = 0.0f;
 
                 //Filtrdolnoprzepustowy z alfa
-                if (voices[v].mode == MODE_HIHAT) {
-                    //próbka z losowego miejsca blisko końca bufora, powiino dać metalicznosc
-                    int mod_offset = rand() % 10; 
-                    current_sample = read_sample(voices[v].delay_line, voices[v].delay_line->size - mod_offset);
-                } else if (voices[v].mode == MODE_PIANO){
-                    current_sample = read_sample_interpolated(voices[v].delay_line, voices[v].exact_delay);
-                }
-                 
-                else {
-                    //odczyt standardowey
-                    current_sample = read_sample(voices[v].delay_line, voices[v].delay_line->size);
+                if(voices[v].delay_line != NULL){
+                    if (voices[v].mode == MODE_HIHAT) {
+                        //próbka z losowego miejsca blisko końca bufora, powiino dać metalicznosc
+                        int mod_offset = rand() % 10; 
+                        current_sample = read_sample(voices[v].delay_line, voices[v].delay_line->size - mod_offset);
+                    } else if (voices[v].mode == MODE_PIANO){
+                        current_sample = read_sample_interpolated(voices[v].delay_line, voices[v].exact_delay);
+                    }
+                    
+                    else {
+                        //odczyt standardowey
+                        current_sample = read_sample(voices[v].delay_line, voices[v].delay_line->size);
+                    }
                 }
 
                 //filtracja zalezna od trybu
+                /*
                 if (voices[v].mode == MODE_STRING) {
                     processed_sample = (voices[v].alpha * current_sample) + ((1.0f - voices[v].alpha) * voices[v].previous_sample);
                 
@@ -198,14 +205,16 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                     voices[v].amp_envelope *= 0.999996f;  // 0.5^(1/(4*44100))
 
                     // Brightness schodzi wolniej
-                    voices[v].brightness *= 0.999990f;
+                    voices[v].brightness *= 0.9992f;
                     // alpha wyższe: 0.97→0.95 zamiast 0.98→0.85
                     // Niski LP = wolny zanik energii w pętli KS
-                    float dynamic_alpha = 0.95f + 0.02f * voices[v].brightness;
-
-                    // LP w pętli sprzężenia
-                    float smoothed = dynamic_alpha * current_sample
-                                + (1.0f - dynamic_alpha) * voices[v].previous_sample;
+                    float next_sample = read_sample_interpolated(voices[v].delay_line, voices[v].exact_delay - 1.0f);
+                    
+                    // Filtr uśredniający z 3 próbek (mocno gasi wysokie, "keyboardowe" częstotliwości)
+                    float smoothed = (voices[v].previous_sample * 0.25f) + (current_sample * 0.5f) + (next_sample * 0.25f);
+                    
+                    // Dodatkowo wymuszamy delikatne opadanie struny z każdym cyklem, żeby nie dzwoniła w nieskończoność
+                    smoothed *= 0.995f;
 
                     float c = voices[v].ap_coef;
 
@@ -246,8 +255,76 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
                         processed_sample = raw_mesh_sample;
                     }
                 }
+                    */
 
-                if (voices[v].mode != MODE_FDTD_GONG && voices[v].mode != MODE_FDTD_METALIC && voices[v].mode != MODE_FDTD_DRUM) {
+                // Filtracja zależna od trybu (Clean Code)
+                switch (voices[v].mode) {
+                    case MODE_STRING:
+                    case MODE_DRUM:
+                        processed_sample = (voices[v].alpha * current_sample) + ((1.0f - voices[v].alpha) * voices[v].previous_sample);
+                        break;
+
+                    case MODE_HIHAT: {
+                        float sign = (rand() % 100 < 50) ? -1.0f : 1.0f; 
+                        processed_sample = sign * ((voices[v].alpha * current_sample) + ((1.0f - voices[v].alpha) * voices[v].previous_sample));
+                        break;
+                    }
+
+                    case MODE_SNARE: {
+                        float sign = (rand() % 100 < 50) ? -1.0f : 1.0f; 
+                        float smoothed = 0.5f * current_sample + 0.5f * voices[v].previous_sample;
+                        processed_sample = sign * smoothed;
+                        
+                        float hpf_out = processed_sample - voices[v].hpf_state;
+                        voices[v].hpf_state = processed_sample;
+                        processed_sample = hpf_out;
+                        break;
+                    }
+
+                    case MODE_PIANO: {
+                        voices[v].sample_count++;
+                        voices[v].amp_envelope *= 0.999996f; 
+                        voices[v].brightness *= 0.9992f;
+                        
+                        float next_sample = read_sample_interpolated(voices[v].delay_line, voices[v].exact_delay - 1.0f);
+                        float smoothed = (voices[v].previous_sample * 0.25f) + (current_sample * 0.5f) + (next_sample * 0.25f);
+                        smoothed *= 0.995f;
+
+                        float c = voices[v].ap_coef;
+                        float ap_out = -c * smoothed + voices[v].ap_prev_in + c * voices[v].ap_prev_out;
+                        voices[v].ap_prev_in  = smoothed;
+                        voices[v].ap_prev_out = ap_out;
+
+                        float ap2_out = -c * ap_out + voices[v].ap2_prev_in + c * voices[v].ap2_prev_out;
+                        voices[v].ap2_prev_in  = ap_out;
+                        voices[v].ap2_prev_out = ap2_out;
+
+                        processed_sample = ap2_out; 
+                        out_sample = processed_sample * voices[v].amp_envelope;
+                        break;
+                    }
+
+                    case MODE_FDTD_GONG:
+                    case MODE_FDTD_METALIC:
+                    case MODE_FDTD_DRUM: {
+                        int is_drum = (voices[v].mode == MODE_FDTD_DRUM) ? 1 : 0;
+                        float raw_mesh_sample = process_drum2d(voices[v].drum_mesh, is_drum) * 2.0f; 
+                        
+                        if (voices[v].mode == MODE_FDTD_METALIC || voices[v].mode == MODE_FDTD_DRUM) {
+                            processed_sample = (voices[v].alpha * raw_mesh_sample) + ((1.0f - voices[v].alpha) * voices[v].previous_sample);
+                            voices[v].previous_sample = processed_sample;
+                        } else {
+                            processed_sample = raw_mesh_sample;
+                        }
+                        break;
+                    }
+                    
+                    default:
+                        processed_sample = 0.0f;
+                        break;
+                }
+
+                if (voices[v].delay_line != NULL) {
                     
                     voices[v].previous_sample = processed_sample;
     
@@ -257,41 +334,35 @@ void synthesize_poly(Voice* voices, size_t num_voices, float* output, size_t num
 
                 //miksowanie
                 if (voices[v].mode == MODE_PIANO) {
-                    mixed_sample += out_sample; // Miksujemy sygnał z obwiednią
+                    mixed_piano += (out_sample * 0.33f);
                 } else {
-                    mixed_sample += processed_sample;
+                    mixed_others += processed_sample;
                 }
             }
         }
 
         //zabezpieczenie na clipping
         if (num_voices > 0) {
-            float final_out = mixed_sample / (float)num_voices;
-            if (final_out > 1.0f) final_out = 1.0f; 
-            if (final_out < -1.0f) final_out = -1.0f;
+            float final_piano = mixed_piano / (float)num_voices;
+            float final_others = mixed_others / (float)num_voices;
             
-            // --- POGŁOS PUDŁA REZONANSOWEGO ---
-            float dry = final_out;
+            float dry = final_piano; // Tylko pianino wchodzi do pogłosu
             
-            // Odczyt z "ścian" pudła
             float c1_out = read_sample(comb1, comb1->size);
             float c2_out = read_sample(comb2, comb2->size);
             float c3_out = read_sample(comb3, comb3->size);
             float c4_out = read_sample(comb4, comb4->size);
             
-            // Sumowanie echa
             float wet = (c1_out + c2_out + c3_out + c4_out) * 0.25f;
             
-            // Wpychanie nowego dźwięku do pudła (z odbiciem)
             push_sample(comb1, dry + c1_out * rev_feedback);
             push_sample(comb2, dry + c2_out * rev_feedback);
             push_sample(comb3, dry + c3_out * rev_feedback);
             push_sample(comb4, dry + c4_out * rev_feedback);
             
-            // Miksowanie sygnału suchego z mokrym (60% strun, 40% pudła)
-            float output_mixed = (dry * 0.6f) + (wet * 0.4f);
+            // Miksujemy: Pianino(z pogłosem) + Inne Instrumenty(czyste)
+            float output_mixed = (dry * 0.6f) + (wet * 0.4f) + final_others;
             
-            // Ostateczny clipping
             if (output_mixed > 1.0f) output_mixed = 1.0f;
             if (output_mixed < -1.0f) output_mixed = -1.0f;
             
