@@ -21,7 +21,7 @@ Drum2D* create_drum2d(float rho, float damping, int is_circular) {
 }
 
 void strike_drum2d(Drum2D* drum, int cx, int cy, float force) {
-    //uderzamy w obszar 5x5 miękką, filcową pałką- powinno eliminować szum
+    //uderzamy w obszar 7x7 miękką, filcową pałką- powinno eliminować szum
     for (int dx = -3; dx <= 3; dx++) {
         for (int dy = -3; dy <= 3; dy++) {
             int x = cx + dx;
